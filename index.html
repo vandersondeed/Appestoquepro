@@ -3,7 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Estoque | Modo Claro/Escuro + Reposição Personalizada</title>
+    <title>EstoquePro | Login Google + Sincronização em Tempo Real</title>
+    
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    
     <style>
         /* Temas - Modo Claro e Escuro */
         :root {
@@ -66,6 +72,136 @@
             display: flex;
             min-height: 100vh;
             position: relative;
+        }
+
+        /* TELA DE LOGIN */
+        .login-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: var(--bg);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(10px);
+        }
+
+        .login-card {
+            background: var(--card-bg);
+            padding: 40px 30px;
+            border-radius: var(--radius);
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border);
+        }
+
+        .login-card h2 {
+            color: var(--primary);
+            margin-bottom: 20px;
+            font-size: 1.8rem;
+        }
+
+        .login-card p {
+            color: var(--text-secondary);
+            margin-bottom: 30px;
+        }
+
+        .google-btn {
+            background: #4285f4;
+            color: white;
+            border: none;
+            padding: 14px 28px;
+            border-radius: 40px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            transition: transform 0.2s;
+        }
+
+        .google-btn:hover {
+            transform: scale(1.02);
+            background: #357ae8;
+        }
+
+        .google-btn:active {
+            transform: scale(0.98);
+        }
+
+        .user-info-bar {
+            background: var(--primary);
+            color: white;
+            padding: 10px 20px;
+            border-radius: var(--radius);
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .user-details {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .user-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: var(--accent);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+
+        .user-email {
+            font-size: 0.85rem;
+            opacity: 0.9;
+        }
+
+        .logout-btn {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            padding: 6px 16px;
+            border-radius: 20px;
+            color: white;
+            cursor: pointer;
+            font-size: 0.8rem;
+        }
+
+        .logout-btn:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
+        .sync-status {
+            font-size: 0.7rem;
+            padding: 4px 10px;
+            border-radius: 12px;
+            background: var(--accent);
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .sync-status.syncing {
+            background: var(--warning);
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
         }
 
         /* SIDEBAR */
@@ -540,9 +676,7 @@
             flex-wrap: wrap;
         }
 
-        /* ============================================ */
-        /* LETREIRO NEON VERDE - TAMANHO MAIOR          */
-        /* ============================================ */
+        /* LETREIRO NEON VERDE */
         .neon-container {
             display: flex;
             justify-content: center;
@@ -571,7 +705,6 @@
             color: #00ff88;
         }
 
-        /* Efeito neon verde piscante */
         @keyframes neonVerdePisca {
             0% {
                 text-shadow: 
@@ -593,7 +726,6 @@
             }
         }
 
-        /* Desaparece após 15 segundos */
         @keyframes fadeOutNeon {
             0% {
                 opacity: 1;
@@ -655,7 +787,6 @@
             }
         }
 
-        /* Para telas muito pequenas */
         @media (max-width: 480px) {
             .neon-text {
                 font-size: 0.65rem;
@@ -663,10 +794,37 @@
                 padding: 6px 12px;
             }
         }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 0.6s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
-<div class="app-layout">
+
+<!-- TELA DE LOGIN -->
+<div id="loginOverlay" class="login-overlay">
+    <div class="login-card">
+        <h2>📦 EstoquePro</h2>
+        <p>Faça login com sua conta Google para acessar seu estoque compartilhado em qualquer dispositivo!</p>
+        <button class="google-btn" onclick="loginComGoogle()">
+            🚀 Entrar com Google
+        </button>
+        <p style="margin-top: 20px; font-size: 0.75rem;">✓ Sincronização em tempo real<br>✓ Compartilhado com sua equipe<br>✓ Acesso de qualquer lugar</p>
+    </div>
+</div>
+
+<div class="app-layout" id="appContent" style="display: none;">
     <button class="menu-toggle" id="menuToggle">☰</button>
     
     <div class="sidebar" id="sidebar">
@@ -684,7 +842,22 @@
 
     <div class="main-content">
         <div class="container">
-            <!-- LETREIRO NEON VERDE - criado por vandenson lima Pinheiro -->
+            <!-- BARRA DE INFORMAÇÕES DO USUÁRIO -->
+            <div class="user-info-bar" id="userInfoBar">
+                <div class="user-details">
+                    <div class="user-avatar" id="userAvatar">👤</div>
+                    <div>
+                        <div id="userName">Carregando...</div>
+                        <div class="user-email" id="userEmail"></div>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <div id="syncStatus" class="sync-status">✅ Sincronizado</div>
+                    <button class="logout-btn" onclick="logout()">🚪 Sair</button>
+                </div>
+            </div>
+
+            <!-- LETREIRO NEON VERDE -->
             <div class="neon-container" id="neonContainer">
                 <div class="neon-text">
                     ⚡ criado por vandenson lima Pinheiro ⚡
@@ -692,7 +865,7 @@
             </div>
 
             <div class="header">
-                <h1>📦 Controle de Estoque</h1>
+                <h1>📦 EstoquePro</h1>
                 <div class="stats">
                     <div class="stat-item"><span>Patrimônio</span><b id="totalValue">R$ 0,00</b></div>
                     <div class="stat-item"><span>Itens</span><b id="totalItems">0</b></div>
@@ -721,7 +894,7 @@
 
 <button class="fab" onclick="abrirModal()">＋ NOVO ITEM</button>
 
-<!-- Modal de Reposição Personalizada -->
+<!-- MODAIS (mesmos do original) -->
 <div id="modalRepor" class="modal">
     <div class="modal-body">
         <h2>📦 REPOR ESTOQUE</h2>
@@ -746,257 +919,57 @@
     </div>
 </div>
 
-<!-- Modais existentes -->
 <div id="modal" class="modal"><div class="modal-body"><h2 id="modalTitle">Novo Produto</h2><input type="text" id="pNome" placeholder="Nome do produto"><input type="number" id="pPreco" step="0.01" placeholder="Preço R$"><div style="display:flex;gap:10px"><input type="number" id="pQtd" placeholder="Quantidade"><input type="text" id="pUn" placeholder="Unidade"></div><select id="pCat"><option value="Alimentação">Alimentação</option><option value="Bebidas">Bebidas</option><option value="Bebidas Alcoólicas">Bebidas Alcoólicas</option><option value="Higiene">Higiene</option><option value="Limpeza">Limpeza</option><option value="Outros">Outros</option></select><button class="btn btn-mais" style="width:100%" onclick="salvarProduto()">SALVAR</button><button onclick="fecharModal()" style="width:100%; background:none; margin-top:10px;">CANCELAR</button></div></div>
+
 <div id="modalVenda" class="modal"><div class="modal-body"><h2>🛒 VENDER PRODUTO</h2><div id="vendaProdutoNome" style="font-weight:bold; margin-bottom:10px;"></div><div class="venda-info">📦 Estoque atual: <b id="vendaEstoqueAtual"></b> <span id="vendaUnidadeLabel"></span><br>💰 Preço unitário: R$ <span id="vendaPrecoUnitario"></span></div><label>🔢 QUANTIDADE:</label><input type="number" id="vendaQuantidade" min="1" value="1"><div class="modal-qtd-grid"><button onclick="setVendaQtd(1)">1</button><button onclick="setVendaQtd(2)">2</button><button onclick="setVendaQtd(3)">3</button><button onclick="setVendaQtd(5)">5</button><button onclick="setVendaQtd(10)">10</button></div><div class="venda-info" style="background:var(--bg);">💵 VALOR TOTAL: R$ <b id="totalVendaValor">0,00</b></div><button class="btn btn-venda" style="width:100%; margin-top:12px;" onclick="confirmarVendaMultipla()">✅ CONFIRMAR VENDA</button><button onclick="fecharModalVenda()" style="width:100%; background:none; margin-top:10px;">CANCELAR</button></div></div>
+
 <div id="modalComprovante" class="modal"><div class="modal-body"><h2>🧾 COMPROVANTE</h2><div id="comprovanteContent" style="background:var(--bg); padding:15px; border-radius:14px; margin:15px 0; font-family:monospace; font-size:0.75rem; white-space:pre-line;"></div><button class="btn btn-mais" onclick="salvarComprovanteComoTxt()">💾 SALVAR TXT</button><button onclick="fecharModalComprovante()" style="margin-top:10px; background:var(--text-secondary); width:100%; padding:10px; border:none; border-radius:12px; color:white;">FECHAR</button></div></div>
+
 <div id="modalRelatorio" class="modal"><div class="modal-body"><h2>📊 RELATÓRIO GERAL</h2><div id="relatorioVendasContent" style="max-height:350px; overflow-y:auto;"></div><div class="total-geral" id="totalGeralVendas"></div><button class="btn btn-mais" style="margin-top:15px;" onclick="salvarRelatorioCompleto()">📄 SALVAR TXT</button><button onclick="fecharModalRelatorio()" style="margin-top:10px; width:100%; background:none;">FECHAR</button></div></div>
+
 <div id="modalConfirmar" class="modal"><div class="modal-body"><h2>⚠️ Atenção</h2><p style="margin:15px 0;">Tem certeza que deseja apagar TODO o histórico de vendas? Essa ação é irreversível.</p><div style="display:flex; gap:10px;"><button class="btn-perigo" style="flex:1;" onclick="executarApagarHistorico()">SIM, APAGAR</button><button class="btn btn-mais" style="flex:1;" onclick="fecharModalConfirmar()">CANCELAR</button></div></div></div>
 
 <script>
-    let reporTempId = null;
-
-    function abrirModalRepor(id) {
-        const p = db.find(x => x.id === id);
-        if(!p) return;
-        reporTempId = id;
-        document.getElementById('reporProdutoNome').innerHTML = `📌 ${p.nome}`;
-        document.getElementById('reporEstoqueAtual').innerText = p.qtd;
-        document.getElementById('reporUnidadeLabel').innerText = p.un;
-        document.getElementById('reporQuantidade').value = 1;
-        atualizarNovaQuantidade();
-        document.getElementById('modalRepor').style.display = 'flex';
-    }
-
-    function setReporQtd(val) {
-        document.getElementById('reporQuantidade').value = val;
-        atualizarNovaQuantidade();
-    }
-
-    function atualizarNovaQuantidade() {
-        const p = db.find(x => x.id === reporTempId);
-        if(!p) return;
-        let qtdAdd = parseInt(document.getElementById('reporQuantidade').value) || 0;
-        const novaQtd = p.qtd + qtdAdd;
-        document.getElementById('novaQuantidade').innerText = novaQtd;
-    }
-
-    function confirmarRepor() {
-        const p = db.find(x => x.id === reporTempId);
-        if(!p) return;
-        let qtdAdd = parseInt(document.getElementById('reporQuantidade').value);
-        if(isNaN(qtdAdd) || qtdAdd <= 0) {
-            alert("Digite uma quantidade válida!");
-            return;
-        }
-        p.qtd += qtdAdd;
-        save();
-        fecharModalRepor();
-        alert(`✅ Foram adicionados ${qtdAdd} ${p.un} ao estoque de ${p.nome}. Novo estoque: ${p.qtd} ${p.un}`);
-    }
-
-    function fecharModalRepor() {
-        document.getElementById('modalRepor').style.display = 'none';
-        reporTempId = null;
-    }
-
-    document.getElementById('reporQuantidade')?.addEventListener('input', atualizarNovaQuantidade);
-
-    // TEMA (MODO CLARO/ESCURO)
-    function toggleTema() {
-        const body = document.body;
-        const btnTema = document.getElementById('btnTema');
-        if (body.classList.contains('dark')) {
-            body.classList.remove('dark');
-            localStorage.setItem('tema', 'claro');
-            btnTema.innerHTML = '🌙 MODO ESCURO';
-        } else {
-            body.classList.add('dark');
-            localStorage.setItem('tema', 'escuro');
-            btnTema.innerHTML = '☀️ MODO CLARO';
-        }
-    }
+    // Configuração do Firebase (usando projeto de demonstração - você precisará criar seu próprio projeto no Firebase Console)
+    // Para usar este app, substitua estas configurações pelas do seu projeto Firebase
+    const firebaseConfig = {
+        apiKey: "AIzaSyDEFAULTKEY_PLEASE_REPLACE_THIS",
+        authDomain: "estoque-pro-demo.firebaseapp.com",
+        projectId: "estoque-pro-demo",
+        storageBucket: "estoque-pro-demo.appspot.com",
+        messagingSenderId: "123456789012",
+        appId: "1:123456789012:web:abcdef123456"
+    };
     
-    function carregarTema() {
-        const temaSalvo = localStorage.getItem('tema');
-        const btnTema = document.getElementById('btnTema');
-        if (temaSalvo === 'escuro') {
-            document.body.classList.add('dark');
-            if(btnTema) btnTema.innerHTML = '☀️ MODO CLARO';
-        } else {
-            document.body.classList.remove('dark');
-            if(btnTema) btnTema.innerHTML = '🌙 MODO ESCURO';
-        }
-    }
-
-    let db = JSON.parse(localStorage.getItem('estoque_grid')) || [];
-    let hist = JSON.parse(localStorage.getItem('estoque_hist')) || [];
+    // INSTRUÇÕES IMPORTANTES:
+    // 1. Acesse https://console.firebase.google.com/
+    // 2. Crie um novo projeto
+    // 3. Ative Authentication > Sign-in method > Google
+    // 4. Ative Firestore Database
+    // 5. Substitua as configurações acima pelas do seu projeto
+    // 6. Nas regras do Firestore, permita leitura/escrita para usuários autenticados:
+    //    rules_version = '2';
+    //    service cloud.firestore {
+    //      match /databases/{database}/documents {
+    //        match /{document=**} {
+    //          allow read, write: if request.auth != null;
+    //        }
+    //      }
+    //    }
+    
+    // Inicializar Firebase
+    let app, auth, dbFirestore;
+    let currentUser = null;
+    let db = []; // Dados locais em cache
+    let hist = [];
     let editId = null;
     let vendaTempId = null;
     let ultimoComprovante = null;
     let categoriaAtiva = "TODOS";
-
+    let reporTempId = null;
+    let isSyncing = false;
+    let unsubscribeProdutos = null;
+    let unsubscribeVendas = null;
+    
     const categoriasDisponiveis = [
-        { id: "Alimentação", icone: "🍚", label: "Alimentação" },
-        { id: "Bebidas", icone: "🥤", label: "Bebidas" },
-        { id: "Bebidas Alcoólicas", icone: "🍺", label: "Bebidas Alcoólicas" },
-        { id: "Higiene", icone: "🧴", label: "Higiene" },
-        { id: "Limpeza", icone: "🧹", label: "Limpeza" },
-        { id: "Outros", icone: "📦", label: "Outros" }
-    ];
-
-    function save() {
-        localStorage.setItem('estoque_grid', JSON.stringify(db));
-        localStorage.setItem('estoque_hist', JSON.stringify(hist));
-        renderizarSidebar();
-        render();
-    }
-
-    function contarProdutosPorCategoria() {
-        let contagem = { "Alimentação":0, "Bebidas":0, "Bebidas Alcoólicas":0, "Higiene":0, "Limpeza":0, "Outros":0 };
-        db.forEach(p => { if(contagem[p.cat] !== undefined) contagem[p.cat]++; else contagem["Outros"]++; });
-        return contagem;
-    }
-
-    function renderizarSidebar() {
-        const container = document.getElementById('categoriasList');
-        if(!container) return;
-        const contagem = contarProdutosPorCategoria();
-        container.innerHTML = '';
-        categoriasDisponiveis.forEach(cat => {
-            const count = contagem[cat.id] || 0;
-            const activeClass = (categoriaAtiva === cat.id) ? 'active' : '';
-            container.innerHTML += `
-                <div class="categoria-item ${activeClass}" onclick="selecionarCategoria('${cat.id}')">
-                    <span>${cat.icone}</span>
-                    <span>${cat.label}</span>
-                    <span class="badge-count">${count}</span>
-                </div>
-            `;
-        });
-    }
-
-    function selecionarCategoria(cat) {
-        categoriaAtiva = cat;
-        renderizarSidebar();
-        render();
-        if(window.innerWidth <= 640) document.getElementById('sidebar').classList.remove('open');
-    }
-
-    function getProdutosFiltrados() {
-        if(categoriaAtiva === "TODOS") return [...db];
-        return db.filter(p => p.cat === categoriaAtiva);
-    }
-
-    function render() {
-        const grid = document.getElementById('gridProdutos');
-        const hList = document.getElementById('listaHist');
-        const filtroInfo = document.getElementById('filtroInfo');
-        grid.innerHTML = '';
-        hList.innerHTML = '';
-        
-        let vTotal = 0;
-        let iTotal = 0;
-        const produtosExibidos = getProdutosFiltrados();
-        
-        let catNomeExibicao = categoriaAtiva === "TODOS" ? "Todos os produtos" : categoriaAtiva;
-        filtroInfo.innerHTML = `<span class="categoria-titulo-filtro">📌 ${catNomeExibicao} (${produtosExibidos.length} produtos)</span>`;
-        
-        db.forEach(p => { vTotal += (p.preco * p.qtd); iTotal += Number(p.qtd); });
-        
-        produtosExibidos.forEach(p => {
-            const low = p.qtd < 5;
-            grid.innerHTML += `
-                <div class="card ${low ? 'low-stock' : ''}">
-                    <button class="btn-edit" onclick="abrirEdicao(${p.id})">✎</button>
-                    <span class="badge-cat">${escapeHtml(p.cat)}</span>
-                    <h2 title="${escapeHtml(p.nome)}">${escapeHtml(p.nome)}</h2>
-                    <div class="price">R$ ${p.preco.toFixed(2)}</div>
-                    <div class="stock-info">
-                        <div class="stock-label">📦 Estoque:</div>
-                        <b>${p.qtd} <small>${escapeHtml(p.un)}</small></b>
-                    </div>
-                    <div class="btn-group">
-                        <button class="btn btn-venda" onclick="abrirModalVenda(${p.id})">VENDER</button>
-                        <button class="btn btn-repor-custom" onclick="abrirModalRepor(${p.id})">REPOR QTD</button>
-                    </div>
-                    <div class="btn-group-special">
-                        <button class="btn btn-venda-multi" onclick="vendaRapida(${p.id}, 1)">+1 Venda</button>
-                        <button class="btn btn-venda-multi" onclick="vendaRapida(${p.id}, 3)">+3 Venda</button>
-                        <button class="btn btn-venda-multi" onclick="vendaRapida(${p.id}, 5)">+5 Venda</button>
-                    </div>
-                </div>
-            `;
-        });
-        
-        if(produtosExibidos.length === 0) {
-            grid.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:60px 20px; background:var(--card-bg); border-radius:24px;">✨ Nenhum produto nesta categoria</div>';
-        }
-        
-        hist.slice(0, 12).forEach((h, idx) => {
-            const dataStr = h.d ? new Date(h.d).toLocaleString() : '';
-            hList.innerHTML += `<div class="history-item" onclick="verComprovante(${idx})"><span><b>${escapeHtml(h.nome)}</b> ${h.q}x ${h.un||''}</span><span>R$ ${(h.vendaTotal || (h.precoUnitario * h.q)).toFixed(2)}<br><small>${dataStr}</small></span></div>`;
-        });
-        
-        if(hist.length === 0) hList.innerHTML = '<div style="text-align:center; padding:30px; color:var(--text-secondary);">Nenhuma venda registrada ainda</div>';
-        
-        document.getElementById('totalValue').innerText = `R$ ${vTotal.toFixed(2)}`;
-        document.getElementById('totalItems').innerText = iTotal;
-    }
-
-    function escapeHtml(str) { if(!str) return ''; return str.replace(/[&<>]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;'})[m]); }
-    
-    function vendaRapida(id, qtd) { let p = db.find(x=>x.id===id); if(p && p.qtd>=qtd) { p.qtd-=qtd; let vt=p.preco*qtd; hist.unshift({nome:p.nome, q:qtd, precoUnitario:p.preco, vendaTotal:vt, un:p.un, d:new Date()}); save(); gerarEExibirComprovante(hist[0]); } else alert("Estoque baixo!"); }
-    
-    function abrirModalVenda(id) { let p=db.find(x=>x.id===id); if(p){ vendaTempId=id; document.getElementById('vendaProdutoNome').innerHTML=`📌 ${p.nome} (${p.cat})`; document.getElementById('vendaEstoqueAtual').innerText=p.qtd; document.getElementById('vendaUnidadeLabel').innerText=p.un; document.getElementById('vendaPrecoUnitario').innerText=p.preco.toFixed(2); document.getElementById('vendaQuantidade').value=1; atualizarTotalVendaModal(); document.getElementById('modalVenda').style.display='flex'; } }
-    
-    function atualizarTotalVendaModal() { let p=db.find(x=>x.id===vendaTempId); if(p){ let qtd=parseInt(document.getElementById('vendaQuantidade').value)||1; document.getElementById('totalVendaValor').innerText=(p.preco*qtd).toFixed(2); } }
-    
-    function setVendaQtd(v){ document.getElementById('vendaQuantidade').value=v; atualizarTotalVendaModal(); }
-    
-    function confirmarVendaMultipla(){ let p=db.find(x=>x.id===vendaTempId); if(!p) return; let qtd=parseInt(document.getElementById('vendaQuantidade').value)||1; if(p.qtd<qtd){ alert(`Estoque: ${p.qtd}`); return; } p.qtd-=qtd; let vt=p.preco*qtd; let rec={nome:p.nome, q:qtd, precoUnitario:p.preco, vendaTotal:vt, un:p.un, d:new Date()}; hist.unshift(rec); save(); gerarEExibirComprovante(rec); fecharModalVenda(); }
-    
-    function gerarEExibirComprovante(v){ let data=new Date(v.d).toLocaleString(); let txt=`🧾 COMPROVANTE DE VENDA\n================================\nProduto: ${v.nome}\nQuantidade: ${v.q} ${v.un||'un'}\nPreço unitário: R$ ${v.precoUnitario.toFixed(2)}\nValor total: R$ ${v.vendaTotal.toFixed(2)}\nData/Hora: ${data}\n================================\nObrigado!`; ultimoComprovante={texto:txt}; document.getElementById('comprovanteContent').innerHTML=txt.replace(/\n/g,'<br>'); document.getElementById('modalComprovante').style.display='flex'; }
-    
-    function verComprovante(i){ let v=hist[i]; if(v){ let precoU=v.precoUnitario||(v.vendaTotal/v.q); let total=v.vendaTotal||(precoU*v.q); let data=v.d?new Date(v.d).toLocaleString():''; let txt=`🧾 VENDA ARQUIVADA\nProduto: ${v.nome}\nQtd: ${v.q} ${v.un||''}\nUnit: R$ ${precoU.toFixed(2)}\nTotal: R$ ${total.toFixed(2)}\nData: ${data}`; ultimoComprovante={texto:txt}; document.getElementById('comprovanteContent').innerHTML=txt.replace(/\n/g,'<br>'); document.getElementById('modalComprovante').style.display='flex'; } }
-    
-    function salvarComprovanteComoTxt(){ if(ultimoComprovante){ let blob=new Blob([ultimoComprovante.texto],{type:"text/plain"}); let a=document.createElement('a'); a.download=`comprovante_${Date.now()}.txt`; a.href=URL.createObjectURL(blob); a.click(); URL.revokeObjectURL(a.href); alert("Comprovante salvo!"); } }
-    
-    function abrirRelatorioGeral(){ let mapa=new Map(); hist.forEach(v=>{ let nome=v.nome; let q=v.q; let val=v.vendaTotal||(v.precoUnitario*v.q); let un=v.un||'un'; if(mapa.has(nome)){ let ex=mapa.get(nome); ex.qtdTotal+=q; ex.valorTotal+=val; }else mapa.set(nome,{qtdTotal:q, valorTotal:val, un:un}); }); let container=document.getElementById('relatorioVendasContent'); container.innerHTML=''; let totalGeral=0; if(mapa.size===0) container.innerHTML='<div style="padding:20px; text-align:center;">Nenhuma venda registrada</div>'; else Array.from(mapa.entries()).sort((a,b)=>b[1].valorTotal-a[1].valorTotal).forEach(([nome,dados])=>{ totalGeral+=dados.valorTotal; container.innerHTML+=`<div class="relatorio-item"><span><strong>${escapeHtml(nome)}</strong> ${dados.qtdTotal} ${dados.un}</span><span>R$ ${dados.valorTotal.toFixed(2)}</span></div>`; }); document.getElementById('totalGeralVendas').innerHTML=`💰 TOTAL GERAL: R$ ${totalGeral.toFixed(2)}`; document.getElementById('modalRelatorio').style.display='flex'; }
-    
-    function salvarRelatorioCompleto(){ let mapa=new Map(); hist.forEach(v=>{ let nome=v.nome; let q=v.q; let val=v.vendaTotal||(v.precoUnitario*v.q); let un=v.un||'un'; if(mapa.has(nome)){ let ex=mapa.get(nome); ex.qtdTotal+=q; ex.valorTotal+=val; }else mapa.set(nome,{qtdTotal:q, valorTotal:val, un:un}); }); let linhas=["RELATÓRIO GERAL DE VENDAS", "=".repeat(40), `Gerado em: ${new Date().toLocaleString()}`, ""]; let total=0; for(let [nome,dados] of mapa.entries()){ total+=dados.valorTotal; linhas.push(`${nome}: ${dados.qtdTotal} ${dados.un} - R$ ${dados.valorTotal.toFixed(2)}`); } linhas.push("", "=".repeat(40), `TOTAL GERAL: R$ ${total.toFixed(2)}`); let blob=new Blob([linhas.join("\n")],{type:"text/plain"}); let a=document.createElement('a'); a.download=`relatorio_vendas_${Date.now()}.txt`; a.href=URL.createObjectURL(blob); a.click(); URL.revokeObjectURL(a.href); alert("Relatório salvo!"); }
-    
-    function salvarRelatorioDiario() {
-        const hoje = new Date();
-        const inicioDia = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
-        const vendasHoje = hist.filter(v => { if(!v.d) return false; const dataVenda = new Date(v.d); return dataVenda >= inicioDia && dataVenda < new Date(inicioDia.getTime() + 86400000); });
-        if(vendasHoje.length === 0) { alert("Nenhuma venda registrada hoje!"); return; }
-        const mapaDia = new Map(); let totalDia = 0;
-        vendasHoje.forEach(v => { const nome=v.nome; const qtd=v.q; const val=v.vendaTotal||(v.precoUnitario*v.q); const un=v.un||'un'; totalDia+=val; if(mapaDia.has(nome)){ let ex=mapaDia.get(nome); ex.qtdTotal+=qtd; ex.valorTotal+=val; }else mapaDia.set(nome,{qtdTotal:qtd, valorTotal:val, un:un}); });
-        const dataStr = hoje.toLocaleDateString('pt-BR').replace(/\//g, '-');
-        const linhas = ["=".repeat(50), `📅 RELATÓRIO DIÁRIO - ${hoje.toLocaleDateString('pt-BR')}`, "=".repeat(50), `Gerado: ${hoje.toLocaleString()}`, "", "PRODUTO                 | QTD  | TOTAL (R$)", "-".repeat(50)];
-        for(let [nome, dados] of mapaDia.entries()) linhas.push(`${nome.padEnd(22)} | ${dados.qtdTotal.toString().padStart(4)} ${dados.un} | R$ ${dados.valorTotal.toFixed(2)}`);
-        linhas.push("-".repeat(50), `💰 TOTAL DO DIA: R$ ${totalDia.toFixed(2)}`, `📊 Vendas: ${vendasHoje.length} transações`, "=".repeat(50));
-        const blob=new Blob([linhas.join("\n")],{type:"text/plain"}); const a=document.createElement('a'); a.download=`vendas_diarias_${dataStr}.txt`; a.href=URL.createObjectURL(blob); a.click(); URL.revokeObjectURL(a.href); alert(`✅ Relatório diário salvo! Total: R$ ${totalDia.toFixed(2)}`);
-    }
-    
-    function confirmarApagarHistorico() { document.getElementById('modalConfirmar').style.display = 'flex'; }
-    function executarApagarHistorico() { hist = []; save(); fecharModalConfirmar(); alert("✅ Histórico apagado!"); }
-    function fecharModalConfirmar() { document.getElementById('modalConfirmar').style.display = 'none'; }
-    function fecharModalVenda(){ document.getElementById('modalVenda').style.display='none'; vendaTempId=null; }
-    function fecharModalComprovante(){ document.getElementById('modalComprovante').style.display='none'; }
-    function fecharModalRelatorio(){ document.getElementById('modalRelatorio').style.display='none'; }
-    function abrirModal(){ editId=null; document.getElementById('modalTitle').innerText="Novo Produto"; document.querySelectorAll('#modal input, #modal select').forEach(i=>i.value=''); document.getElementById('pQtd').value=0; document.getElementById('pUn').value='un'; document.getElementById('modal').style.display='flex'; }
-    function abrirEdicao(id){ let p=db.find(x=>x.id===id); if(p){ editId=id; document.getElementById('pNome').value=p.nome; document.getElementById('pPreco').value=p.preco; document.getElementById('pQtd').value=p.qtd; document.getElementById('pUn').value=p.un; document.getElementById('pCat').value=p.cat; document.getElementById('modalTitle').innerText="Editar Produto"; document.getElementById('modal').style.display='flex'; } }
-    function salvarProduto(){ let nome=document.getElementById('pNome').value.trim(); let preco=parseFloat(document.getElementById('pPreco').value); let qtd=parseInt(document.getElementById('pQtd').value); let un=document.getElementById('pUn').value.trim()||'un'; let cat=document.getElementById('pCat').value; if(!nome||isNaN(preco)||preco<=0) return alert("Dados inválidos"); if(editId){ let idx=db.findIndex(x=>x.id===editId); if(idx!==-1) db[idx]={...db[idx], nome, preco, qtd, un, cat}; }else db.push({id:Date.now(), nome, preco, qtd, un, cat}); fecharModal(); save(); }
-    function fecharModal(){ document.getElementById('modal').style.display='none'; editId=null; }
-    
-    document.getElementById('vendaQuantidade')?.addEventListener('input', atualizarTotalVendaModal);
-    document.getElementById('menuToggle')?.addEventListener('click',()=>{ document.getElementById('sidebar').classList.toggle('open'); });
-    
-    carregarTema();
-    renderizarSidebar();
-    render();
-</script>
-</body>
-</html>
+        { id: "Alimentação", icone: "
