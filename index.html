@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>EstoquePro | Login Google + Sincronização em Tempo Real</title>
+    <title>EstoquePro | Login E-mail + Sincronização em Tempo Real</title>
     
     <!-- Firebase SDKs -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
@@ -94,7 +94,7 @@
             padding: 40px 30px;
             border-radius: var(--radius);
             text-align: center;
-            max-width: 400px;
+            max-width: 420px;
             width: 90%;
             box-shadow: var(--shadow);
             border: 1px solid var(--border);
@@ -108,11 +108,34 @@
 
         .login-card p {
             color: var(--text-secondary);
-            margin-bottom: 30px;
+            margin-bottom: 20px;
         }
 
-        .google-btn {
-            background: #4285f4;
+        .input-group {
+            margin-bottom: 15px;
+            text-align: left;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            font-size: 0.9rem;
+            background: var(--bg);
+            color: var(--text);
+        }
+
+        .login-btn {
+            background: var(--accent);
             color: white;
             border: none;
             padding: 14px 28px;
@@ -120,19 +143,50 @@
             font-size: 1rem;
             font-weight: bold;
             cursor: pointer;
-            display: inline-flex;
-            align-items: center;
-            gap: 12px;
+            width: 100%;
             transition: transform 0.2s;
+            margin-top: 10px;
         }
 
-        .google-btn:hover {
+        .login-btn:hover {
             transform: scale(1.02);
-            background: #357ae8;
+            background: var(--primary);
         }
 
-        .google-btn:active {
+        .login-btn:active {
             transform: scale(0.98);
+        }
+
+        .toggle-login {
+            margin-top: 20px;
+            color: var(--accent);
+            cursor: pointer;
+            font-size: 0.85rem;
+            text-decoration: underline;
+        }
+
+        .toggle-login:hover {
+            color: var(--primary);
+        }
+
+        .error-msg {
+            background: var(--danger);
+            color: white;
+            padding: 10px;
+            border-radius: 10px;
+            font-size: 0.75rem;
+            margin-bottom: 15px;
+            display: none;
+        }
+
+        .success-msg {
+            background: var(--success);
+            color: white;
+            padding: 10px;
+            border-radius: 10px;
+            font-size: 0.75rem;
+            margin-bottom: 15px;
+            display: none;
         }
 
         .user-info-bar {
@@ -816,11 +870,46 @@
 <div id="loginOverlay" class="login-overlay">
     <div class="login-card">
         <h2>📦 EstoquePro</h2>
-        <p>Faça login com sua conta Google para acessar seu estoque compartilhado em qualquer dispositivo!</p>
-        <button class="google-btn" onclick="loginComGoogle()">
-            🚀 Entrar com Google
-        </button>
-        <p style="margin-top: 20px; font-size: 0.75rem;">✓ Sincronização em tempo real<br>✓ Compartilhado com sua equipe<br>✓ Acesso de qualquer lugar</p>
+        <p>Faça login com e-mail e senha para acessar seu estoque compartilhado!</p>
+        
+        <div id="loginError" class="error-msg"></div>
+        <div id="loginSuccess" class="success-msg"></div>
+        
+        <div id="loginForm">
+            <div class="input-group">
+                <label>📧 E-mail</label>
+                <input type="email" id="loginEmail" placeholder="seuemail@exemplo.com">
+            </div>
+            <div class="input-group">
+                <label>🔒 Senha</label>
+                <input type="password" id="loginPassword" placeholder="Digite sua senha">
+            </div>
+            <button class="login-btn" onclick="fazerLogin()">🚀 ENTRAR</button>
+            <div class="toggle-login" onclick="toggleCadastro()">Não tem conta? Cadastre-se</div>
+        </div>
+        
+        <div id="cadastroForm" style="display: none;">
+            <div class="input-group">
+                <label>📧 E-mail</label>
+                <input type="email" id="cadastroEmail" placeholder="seuemail@exemplo.com">
+            </div>
+            <div class="input-group">
+                <label>🔒 Senha (mínimo 6 caracteres)</label>
+                <input type="password" id="cadastroPassword" placeholder="Digite sua senha">
+            </div>
+            <div class="input-group">
+                <label>🔒 Confirmar Senha</label>
+                <input type="password" id="confirmPassword" placeholder="Confirme sua senha">
+            </div>
+            <button class="login-btn" onclick="fazerCadastro()">📝 CRIAR CONTA</button>
+            <div class="toggle-login" onclick="toggleLogin()">Já tenho conta? Fazer login</div>
+        </div>
+        
+        <p style="margin-top: 20px; font-size: 0.7rem; color: var(--text-secondary);">
+            ✓ Compartilhado com sua equipe<br>
+            ✓ Várias pessoas podem usar a mesma conta<br>
+            ✓ Sincronização em tempo real
+        </p>
     </div>
 </div>
 
@@ -860,7 +949,7 @@
             <!-- LETREIRO NEON VERDE -->
             <div class="neon-container" id="neonContainer">
                 <div class="neon-text">
-                    ⚡ criado por vandenson lima Pinheiro ⚡
+                    ⚡ criado por Vandenson Lima Pinheiro ⚡
                 </div>
             </div>
 
@@ -931,9 +1020,9 @@
 
 <script>
     // CONFIGURAÇÃO DO FIREBASE
-    // ATENÇÃO: Você precisa criar um projeto no Firebase e substituir estes dados!
+    // IMPORTANTE: Você precisa criar um projeto no Firebase Console e substituir estes dados!
     const firebaseConfig = {
-        apiKey: "AIzaSyDEFAULTKEY_PLEASE_REPLACE_THIS",   // ← SUBSTITUIR PELA SUA CHAVE
+        apiKey: "AIzaSyDEFAULTKEY_PLEASE_REPLACE_THIS",   // ← SUBSTITUIR PELA SUA CHAVE API
         authDomain: "estoque-pro-demo.firebaseapp.com",    // ← SUBSTITUIR
         projectId: "estoque-pro-demo",                    // ← SUBSTITUIR
         storageBucket: "estoque-pro-demo.appspot.com",    // ← SUBSTITUIR
@@ -941,7 +1030,7 @@
         appId: "1:123456789012:web:abcdef123456"          // ← SUBSTITUIR
     };
     
-    // IMPORTANTE: Regras do Firestore para permitir acesso apenas a usuários autenticados:
+    // ATENÇÃO: Nas regras do Firestore, configure para permitir acesso apenas a usuários autenticados:
     // rules_version = '2';
     // service cloud.firestore {
     //   match /databases/{database}/documents {
@@ -964,7 +1053,7 @@
     let unsubscribeProdutos = null;
     let unsubscribeVendas = null;
     
-    // Função para inicializar Firebase
+    // Inicializar Firebase
     function initFirebase() {
         try {
             app = firebase.initializeApp(firebaseConfig);
@@ -992,29 +1081,111 @@
             });
         } catch (e) {
             console.error("Erro Firebase:", e);
-            alert("Erro ao conectar com Firebase. Verifique sua configuração.");
+            document.getElementById('loginError').innerText = "Erro ao conectar com Firebase. Verifique sua configuração.";
+            document.getElementById('loginError').style.display = 'block';
         }
     }
     
-    // Função para atualizar informações do usuário na UI
+    function mostrarErro(msg) {
+        const errorDiv = document.getElementById('loginError');
+        errorDiv.innerText = msg;
+        errorDiv.style.display = 'block';
+        setTimeout(() => { errorDiv.style.display = 'none'; }, 3000);
+    }
+    
+    function mostrarSucesso(msg) {
+        const successDiv = document.getElementById('loginSuccess');
+        successDiv.innerText = msg;
+        successDiv.style.display = 'block';
+        setTimeout(() => { successDiv.style.display = 'none'; }, 3000);
+    }
+    
+    // FUNÇÃO DE LOGIN COM E-MAIL
+    async function fazerLogin() {
+        const email = document.getElementById('loginEmail').value.trim();
+        const password = document.getElementById('loginPassword').value;
+        
+        if (!email || !password) {
+            mostrarErro("Preencha e-mail e senha!");
+            return;
+        }
+        
+        try {
+            const userCredential = await auth.signInWithEmailAndPassword(email, password);
+            mostrarSucesso("Login realizado com sucesso!");
+        } catch (error) {
+            if (error.code === 'auth/user-not-found') {
+                mostrarErro("Usuário não encontrado. Faça o cadastro primeiro!");
+            } else if (error.code === 'auth/wrong-password') {
+                mostrarErro("Senha incorreta!");
+            } else if (error.code === 'auth/invalid-email') {
+                mostrarErro("E-mail inválido!");
+            } else {
+                mostrarErro("Erro ao fazer login: " + error.message);
+            }
+            console.error(error);
+        }
+    }
+    
+    // FUNÇÃO DE CADASTRO
+    async function fazerCadastro() {
+        const email = document.getElementById('cadastroEmail').value.trim();
+        const password = document.getElementById('cadastroPassword').value;
+        const confirm = document.getElementById('confirmPassword').value;
+        
+        if (!email || !password) {
+            mostrarErro("Preencha e-mail e senha!");
+            return;
+        }
+        
+        if (password.length < 6) {
+            mostrarErro("A senha deve ter pelo menos 6 caracteres!");
+            return;
+        }
+        
+        if (password !== confirm) {
+            mostrarErro("As senhas não conferem!");
+            return;
+        }
+        
+        try {
+            const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+            mostrarSucesso("Conta criada com sucesso! Login realizado automaticamente.");
+        } catch (error) {
+            if (error.code === 'auth/email-already-in-use') {
+                mostrarErro("Este e-mail já está cadastrado! Faça login diretamente.");
+                toggleLogin();
+            } else {
+                mostrarErro("Erro ao criar conta: " + error.message);
+            }
+            console.error(error);
+        }
+    }
+    
+    function toggleCadastro() {
+        document.getElementById('loginForm').style.display = 'none';
+        document.getElementById('cadastroForm').style.display = 'block';
+        document.getElementById('loginError').style.display = 'none';
+        document.getElementById('loginSuccess').style.display = 'none';
+    }
+    
+    function toggleLogin() {
+        document.getElementById('loginForm').style.display = 'block';
+        document.getElementById('cadastroForm').style.display = 'none';
+        document.getElementById('loginError').style.display = 'none';
+        document.getElementById('loginSuccess').style.display = 'none';
+    }
+    
+    // Atualizar informações do usuário na UI
     function atualizarInfoUsuario(user) {
         if (user) {
-            const nome = user.displayName || user.email.split('@')[0];
             const email = user.email;
-            const avatar = user.photoURL ? `<img src="${user.photoURL}" style="width:36px;height:36px;border-radius:50%;">` : user.email.charAt(0).toUpperCase();
+            const nome = email.split('@')[0];
+            const avatar = email.charAt(0).toUpperCase();
             document.getElementById('userAvatar').innerHTML = avatar;
             document.getElementById('userName').innerText = nome;
             document.getElementById('userEmail').innerText = email;
         }
-    }
-    
-    // Login com Google
-    function loginComGoogle() {
-        const provider = new firebase.auth.GoogleAuthProvider();
-        auth.signInWithPopup(provider).catch(erro => {
-            console.error(erro);
-            alert("Erro ao fazer login: " + erro.message);
-        });
     }
     
     // Logout
@@ -1040,7 +1211,7 @@
             }, (error) => {
                 console.error("Erro produtos:", error);
                 setSyncStatus(false);
-                alert("Erro ao sincronizar produtos: " + error.message);
+                mostrarErro("Erro ao sincronizar produtos: " + error.message);
             });
         
         // Listener para vendas
@@ -1149,9 +1320,7 @@
             const card = document.createElement('div');
             card.className = `card ${lowStock ? 'low-stock' : ''}`;
             
-            // Preço formatado
             const precoFormat = `R$ ${prod.preco.toFixed(2)}`;
-            // Unidade padrão
             const unidade = prod.unidade || "un";
             
             card.innerHTML = `
@@ -1272,16 +1441,6 @@
         abrirModal(id);
     }
     
-    async function excluirProduto(id) {
-        if (confirm("Excluir produto permanentemente?")) {
-            try {
-                await dbFirestore.collection('produtos').doc(id).delete();
-            } catch(e) {
-                alert("Erro ao excluir: " + e.message);
-            }
-        }
-    }
-    
     // Abrir modal de reposição
     function abrirModalRepor(id) {
         const prod = db.find(p => p.id === id);
@@ -1368,9 +1527,7 @@
         const novaQtd = prod.qtd - qtd;
         
         try {
-            // Atualizar produto
             await dbFirestore.collection('produtos').doc(vendaTempId).update({ qtd: novaQtd });
-            // Registrar venda
             const vendaObj = {
                 produtoId: prod.id,
                 produtoNome: prod.nome,
