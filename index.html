@@ -894,7 +894,7 @@
 
 <button class="fab" onclick="abrirModal()">＋ NOVO ITEM</button>
 
-<!-- MODAIS (mesmos do original) -->
+<!-- MODAIS -->
 <div id="modalRepor" class="modal">
     <div class="modal-body">
         <h2>📦 REPOR ESTOQUE</h2>
@@ -930,37 +930,30 @@
 <div id="modalConfirmar" class="modal"><div class="modal-body"><h2>⚠️ Atenção</h2><p style="margin:15px 0;">Tem certeza que deseja apagar TODO o histórico de vendas? Essa ação é irreversível.</p><div style="display:flex; gap:10px;"><button class="btn-perigo" style="flex:1;" onclick="executarApagarHistorico()">SIM, APAGAR</button><button class="btn btn-mais" style="flex:1;" onclick="fecharModalConfirmar()">CANCELAR</button></div></div></div>
 
 <script>
-    // Configuração do Firebase (usando projeto de demonstração - você precisará criar seu próprio projeto no Firebase Console)
-    // Para usar este app, substitua estas configurações pelas do seu projeto Firebase
+    // CONFIGURAÇÃO DO FIREBASE
+    // ATENÇÃO: Você precisa criar um projeto no Firebase e substituir estes dados!
     const firebaseConfig = {
-        apiKey: "AIzaSyDEFAULTKEY_PLEASE_REPLACE_THIS",
-        authDomain: "estoque-pro-demo.firebaseapp.com",
-        projectId: "estoque-pro-demo",
-        storageBucket: "estoque-pro-demo.appspot.com",
-        messagingSenderId: "123456789012",
-        appId: "1:123456789012:web:abcdef123456"
+        apiKey: "AIzaSyDEFAULTKEY_PLEASE_REPLACE_THIS",   // ← SUBSTITUIR PELA SUA CHAVE
+        authDomain: "estoque-pro-demo.firebaseapp.com",    // ← SUBSTITUIR
+        projectId: "estoque-pro-demo",                    // ← SUBSTITUIR
+        storageBucket: "estoque-pro-demo.appspot.com",    // ← SUBSTITUIR
+        messagingSenderId: "123456789012",                // ← SUBSTITUIR
+        appId: "1:123456789012:web:abcdef123456"          // ← SUBSTITUIR
     };
     
-    // INSTRUÇÕES IMPORTANTES:
-    // 1. Acesse https://console.firebase.google.com/
-    // 2. Crie um novo projeto
-    // 3. Ative Authentication > Sign-in method > Google
-    // 4. Ative Firestore Database
-    // 5. Substitua as configurações acima pelas do seu projeto
-    // 6. Nas regras do Firestore, permita leitura/escrita para usuários autenticados:
-    //    rules_version = '2';
-    //    service cloud.firestore {
-    //      match /databases/{database}/documents {
-    //        match /{document=**} {
-    //          allow read, write: if request.auth != null;
-    //        }
-    //      }
-    //    }
+    // IMPORTANTE: Regras do Firestore para permitir acesso apenas a usuários autenticados:
+    // rules_version = '2';
+    // service cloud.firestore {
+    //   match /databases/{database}/documents {
+    //     match /{document=**} {
+    //       allow read, write: if request.auth != null;
+    //     }
+    //   }
+    // }
     
-    // Inicializar Firebase
     let app, auth, dbFirestore;
     let currentUser = null;
-    let db = []; // Dados locais em cache
+    let db = []; // Cache de produtos
     let hist = [];
     let editId = null;
     let vendaTempId = null;
@@ -971,5 +964,599 @@
     let unsubscribeProdutos = null;
     let unsubscribeVendas = null;
     
-    const categoriasDisponiveis = [
-        { id: "Alimentação", icone: "
+    // Função para inicializar Firebase
+    function initFirebase() {
+        try {
+            app = firebase.initializeApp(firebaseConfig);
+            auth = firebase.auth();
+            dbFirestore = firebase.firestore();
+            
+            // Configurar persistência
+            auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+            
+            // Listener de autenticação
+            auth.onAuthStateChanged((user) => {
+                if (user) {
+                    currentUser = user;
+                    document.getElementById('loginOverlay').style.display = 'none';
+                    document.getElementById('appContent').style.display = 'block';
+                    atualizarInfoUsuario(user);
+                    iniciarListenersRealtime();
+                    carregarProdutosERenderizar();
+                } else {
+                    document.getElementById('loginOverlay').style.display = 'flex';
+                    document.getElementById('appContent').style.display = 'none';
+                    if (unsubscribeProdutos) unsubscribeProdutos();
+                    if (unsubscribeVendas) unsubscribeVendas();
+                }
+            });
+        } catch (e) {
+            console.error("Erro Firebase:", e);
+            alert("Erro ao conectar com Firebase. Verifique sua configuração.");
+        }
+    }
+    
+    // Função para atualizar informações do usuário na UI
+    function atualizarInfoUsuario(user) {
+        if (user) {
+            const nome = user.displayName || user.email.split('@')[0];
+            const email = user.email;
+            const avatar = user.photoURL ? `<img src="${user.photoURL}" style="width:36px;height:36px;border-radius:50%;">` : user.email.charAt(0).toUpperCase();
+            document.getElementById('userAvatar').innerHTML = avatar;
+            document.getElementById('userName').innerText = nome;
+            document.getElementById('userEmail').innerText = email;
+        }
+    }
+    
+    // Login com Google
+    function loginComGoogle() {
+        const provider = new firebase.auth.GoogleAuthProvider();
+        auth.signInWithPopup(provider).catch(erro => {
+            console.error(erro);
+            alert("Erro ao fazer login: " + erro.message);
+        });
+    }
+    
+    // Logout
+    function logout() {
+        auth.signOut();
+    }
+    
+    // Função para iniciar listeners em tempo real
+    function iniciarListenersRealtime() {
+        if (!currentUser) return;
+        
+        setSyncStatus(true);
+        
+        // Listener para produtos
+        unsubscribeProdutos = dbFirestore.collection('produtos')
+            .onSnapshot((snapshot) => {
+                db = [];
+                snapshot.forEach(doc => {
+                    db.push({ id: doc.id, ...doc.data() });
+                });
+                renderizarTudo();
+                setSyncStatus(false);
+            }, (error) => {
+                console.error("Erro produtos:", error);
+                setSyncStatus(false);
+                alert("Erro ao sincronizar produtos: " + error.message);
+            });
+        
+        // Listener para vendas
+        unsubscribeVendas = dbFirestore.collection('vendas')
+            .orderBy('timestamp', 'desc')
+            .limit(50)
+            .onSnapshot((snapshot) => {
+                hist = [];
+                snapshot.forEach(doc => {
+                    hist.push({ id: doc.id, ...doc.data() });
+                });
+                renderizarHistorico();
+                setSyncStatus(false);
+            }, (error) => {
+                console.error("Erro vendas:", error);
+                setSyncStatus(false);
+            });
+    }
+    
+    function setSyncStatus(syncing) {
+        const statusDiv = document.getElementById('syncStatus');
+        if (syncing) {
+            statusDiv.innerHTML = '🔄 Sincronizando...';
+            statusDiv.classList.add('syncing');
+        } else {
+            statusDiv.innerHTML = '✅ Sincronizado';
+            statusDiv.classList.remove('syncing');
+        }
+    }
+    
+    // Carregar produtos
+    async function carregarProdutosERenderizar() {
+        if (!currentUser) return;
+        setSyncStatus(true);
+        try {
+            const snapshot = await dbFirestore.collection('produtos').get();
+            db = [];
+            snapshot.forEach(doc => {
+                db.push({ id: doc.id, ...doc.data() });
+            });
+            renderizarTudo();
+        } catch(e) {
+            console.error(e);
+        } finally {
+            setSyncStatus(false);
+        }
+    }
+    
+    // Renderização completa
+    function renderizarTudo() {
+        renderizarCategorias();
+        renderizarProdutos();
+        atualizarStats();
+    }
+    
+    // Renderizar categorias na sidebar
+    function renderizarCategorias() {
+        const contagem = {};
+        db.forEach(prod => {
+            const cat = prod.categoria || "Outros";
+            contagem[cat] = (contagem[cat] || 0) + 1;
+        });
+        
+        const container = document.getElementById('categoriasList');
+        if (!container) return;
+        
+        container.innerHTML = '';
+        for (const [cat, qtd] of Object.entries(contagem)) {
+            const div = document.createElement('div');
+            div.className = `categoria-item ${categoriaAtiva === cat ? 'active' : ''}`;
+            div.onclick = () => selecionarCategoria(cat);
+            div.innerHTML = `<span>📁</span> <span>${cat}</span><span class="badge-count">${qtd}</span>`;
+            container.appendChild(div);
+        }
+    }
+    
+    function selecionarCategoria(cat) {
+        categoriaAtiva = cat;
+        renderizarCategorias();
+        renderizarProdutos();
+        const filtroInfo = document.getElementById('filtroInfo');
+        if (cat === 'TODOS') {
+            filtroInfo.innerHTML = '<span class="categoria-titulo-filtro">🎯 TODOS OS PRODUTOS</span>';
+        } else {
+            filtroInfo.innerHTML = `<span class="categoria-titulo-filtro">📂 CATEGORIA: ${cat}</span>`;
+        }
+    }
+    
+    function renderizarProdutos() {
+        let produtosFiltrados = db;
+        if (categoriaAtiva !== 'TODOS') {
+            produtosFiltrados = db.filter(p => (p.categoria || "Outros") === categoriaAtiva);
+        }
+        
+        const grid = document.getElementById('gridProdutos');
+        if (!grid) return;
+        
+        if (produtosFiltrados.length === 0) {
+            grid.innerHTML = '<div style="background:var(--card-bg); padding:20px; border-radius:20px; text-align:center; grid-column:span 2;">📭 Nenhum produto nesta categoria</div>';
+            return;
+        }
+        
+        grid.innerHTML = '';
+        produtosFiltrados.forEach(prod => {
+            const lowStock = prod.qtd <= 5;
+            const card = document.createElement('div');
+            card.className = `card ${lowStock ? 'low-stock' : ''}`;
+            
+            // Preço formatado
+            const precoFormat = `R$ ${prod.preco.toFixed(2)}`;
+            // Unidade padrão
+            const unidade = prod.unidade || "un";
+            
+            card.innerHTML = `
+                <button class="btn-edit" onclick="editarProduto('${prod.id}')">✏️</button>
+                <div class="badge-cat">${prod.categoria || "Outros"}</div>
+                <h2>${prod.nome}</h2>
+                <div class="price">${precoFormat}</div>
+                <div class="stock-info">
+                    <span class="stock-label">📦 ESTOQUE</span>
+                    <b>${prod.qtd} ${unidade}</b>
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-venda" onclick="abrirModalVenda('${prod.id}')">🛒 VENDER</button>
+                    <button class="btn btn-mais" onclick="abrirModalRepor('${prod.id}')">📦 REPOR</button>
+                </div>
+                <div class="btn-group-special">
+                    <button class="btn btn-venda-multi" onclick="vendaMultiplaPreDefinida('${prod.id}', 1)">⚡ Vender 1</button>
+                    <button class="btn btn-venda-multi" onclick="vendaMultiplaPreDefinida('${prod.id}', 2)">⚡ Vender 2</button>
+                    <button class="btn btn-venda-multi" onclick="vendaMultiplaPreDefinida('${prod.id}', 5)">⚡ Vender 5</button>
+                </div>
+            `;
+            grid.appendChild(card);
+        });
+    }
+    
+    // Atualizar stats
+    function atualizarStats() {
+        let totalValor = 0;
+        let totalItens = 0;
+        db.forEach(prod => {
+            totalValor += prod.qtd * prod.preco;
+            totalItens += prod.qtd;
+        });
+        document.getElementById('totalValue').innerText = `R$ ${totalValor.toFixed(2)}`;
+        document.getElementById('totalItems').innerText = totalItens;
+    }
+    
+    function renderizarHistorico() {
+        const container = document.getElementById('listaHist');
+        if (!container) return;
+        if (hist.length === 0) {
+            container.innerHTML = '<div style="background:var(--card-bg); padding:15px; border-radius:16px; text-align:center;">Nenhuma venda registrada</div>';
+            return;
+        }
+        container.innerHTML = '';
+        hist.slice(0, 15).forEach(venda => {
+            const data = venda.timestamp ? new Date(venda.timestamp.toDate()).toLocaleString() : "Data desconhecida";
+            const div = document.createElement('div');
+            div.className = 'history-item';
+            div.onclick = () => mostrarComprovante(venda);
+            div.innerHTML = `
+                <div><b>${venda.produtoNome}</b> - ${venda.quantidade} ${venda.unidade || "un"} = R$ ${venda.total.toFixed(2)}</div>
+                <small>${data}</small>
+            `;
+            container.appendChild(div);
+        });
+    }
+    
+    // CRUD
+    function abrirModal(produtoId = null) {
+        editId = produtoId;
+        const modal = document.getElementById('modal');
+        const title = document.getElementById('modalTitle');
+        
+        if (produtoId) {
+            const prod = db.find(p => p.id === produtoId);
+            if (prod) {
+                title.innerText = '✏️ Editar Produto';
+                document.getElementById('pNome').value = prod.nome;
+                document.getElementById('pPreco').value = prod.preco;
+                document.getElementById('pQtd').value = prod.qtd;
+                document.getElementById('pUn').value = prod.unidade || 'un';
+                document.getElementById('pCat').value = prod.categoria || 'Outros';
+            } else {
+                alert("Produto não encontrado");
+                return;
+            }
+        } else {
+            title.innerText = '➕ Novo Produto';
+            document.getElementById('pNome').value = '';
+            document.getElementById('pPreco').value = '';
+            document.getElementById('pQtd').value = '';
+            document.getElementById('pUn').value = 'un';
+            document.getElementById('pCat').value = 'Alimentação';
+        }
+        modal.style.display = 'flex';
+    }
+    
+    async function salvarProduto() {
+        const nome = document.getElementById('pNome').value.trim();
+        const preco = parseFloat(document.getElementById('pPreco').value);
+        const qtd = parseInt(document.getElementById('pQtd').value) || 0;
+        const unidade = document.getElementById('pUn').value.trim() || 'un';
+        const categoria = document.getElementById('pCat').value;
+        
+        if (!nome || isNaN(preco)) {
+            alert("Preencha nome e preço corretamente");
+            return;
+        }
+        
+        try {
+            if (editId) {
+                await dbFirestore.collection('produtos').doc(editId).update({
+                    nome, preco, qtd, unidade, categoria
+                });
+            } else {
+                await dbFirestore.collection('produtos').add({
+                    nome, preco, qtd, unidade, categoria
+                });
+            }
+            fecharModal();
+        } catch(e) {
+            alert("Erro ao salvar: " + e.message);
+        }
+    }
+    
+    function editarProduto(id) {
+        abrirModal(id);
+    }
+    
+    async function excluirProduto(id) {
+        if (confirm("Excluir produto permanentemente?")) {
+            try {
+                await dbFirestore.collection('produtos').doc(id).delete();
+            } catch(e) {
+                alert("Erro ao excluir: " + e.message);
+            }
+        }
+    }
+    
+    // Abrir modal de reposição
+    function abrirModalRepor(id) {
+        const prod = db.find(p => p.id === id);
+        if (!prod) return;
+        reporTempId = id;
+        document.getElementById('reporProdutoNome').innerText = prod.nome;
+        document.getElementById('reporEstoqueAtual').innerText = `${prod.qtd} ${prod.unidade || "un"}`;
+        document.getElementById('reporUnidadeLabel').innerText = prod.unidade || "un";
+        document.getElementById('reporQuantidade').value = '1';
+        atualizarNovaQuantidade();
+        document.getElementById('modalRepor').style.display = 'flex';
+    }
+    
+    function atualizarNovaQuantidade() {
+        const prod = db.find(p => p.id === reporTempId);
+        if (!prod) return;
+        const add = parseInt(document.getElementById('reporQuantidade').value) || 0;
+        const novaQtd = prod.qtd + add;
+        document.getElementById('novaQuantidade').innerText = `${novaQtd} ${prod.unidade || "un"}`;
+    }
+    
+    function setReporQtd(val) {
+        document.getElementById('reporQuantidade').value = val;
+        atualizarNovaQuantidade();
+    }
+    
+    async function confirmarRepor() {
+        const add = parseInt(document.getElementById('reporQuantidade').value);
+        if (!add || add <= 0) {
+            alert("Quantidade inválida");
+            return;
+        }
+        const prod = db.find(p => p.id === reporTempId);
+        if (!prod) return;
+        const novaQtd = prod.qtd + add;
+        try {
+            await dbFirestore.collection('produtos').doc(reporTempId).update({ qtd: novaQtd });
+            fecharModalRepor();
+        } catch(e) {
+            alert("Erro ao repor: " + e.message);
+        }
+    }
+    
+    // Vendas
+    function abrirModalVenda(id) {
+        const prod = db.find(p => p.id === id);
+        if (!prod) return;
+        vendaTempId = id;
+        document.getElementById('vendaProdutoNome').innerText = prod.nome;
+        document.getElementById('vendaEstoqueAtual').innerText = `${prod.qtd} ${prod.unidade || "un"}`;
+        document.getElementById('vendaUnidadeLabel').innerText = prod.unidade || "un";
+        document.getElementById('vendaPrecoUnitario').innerText = prod.preco.toFixed(2);
+        document.getElementById('vendaQuantidade').value = '1';
+        atualizarTotalVenda();
+        document.getElementById('modalVenda').style.display = 'flex';
+    }
+    
+    function setVendaQtd(val) {
+        document.getElementById('vendaQuantidade').value = val;
+        atualizarTotalVenda();
+    }
+    
+    function atualizarTotalVenda() {
+        const prod = db.find(p => p.id === vendaTempId);
+        if (!prod) return;
+        const qtd = parseInt(document.getElementById('vendaQuantidade').value) || 0;
+        const total = qtd * prod.preco;
+        document.getElementById('totalVendaValor').innerText = total.toFixed(2);
+    }
+    
+    async function confirmarVendaMultipla() {
+        const prod = db.find(p => p.id === vendaTempId);
+        if (!prod) return;
+        const qtd = parseInt(document.getElementById('vendaQuantidade').value);
+        if (!qtd || qtd <= 0) {
+            alert("Quantidade inválida");
+            return;
+        }
+        if (qtd > prod.qtd) {
+            alert(`Estoque insuficiente! Disponível: ${prod.qtd} ${prod.unidade || "un"}`);
+            return;
+        }
+        const total = qtd * prod.preco;
+        const novaQtd = prod.qtd - qtd;
+        
+        try {
+            // Atualizar produto
+            await dbFirestore.collection('produtos').doc(vendaTempId).update({ qtd: novaQtd });
+            // Registrar venda
+            const vendaObj = {
+                produtoId: prod.id,
+                produtoNome: prod.nome,
+                quantidade: qtd,
+                precoUnitario: prod.preco,
+                total: total,
+                unidade: prod.unidade || "un",
+                timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                usuario: currentUser.email
+            };
+            await dbFirestore.collection('vendas').add(vendaObj);
+            fecharModalVenda();
+        } catch(e) {
+            alert("Erro ao vender: " + e.message);
+        }
+    }
+    
+    async function vendaMultiplaPreDefinida(id, qtd) {
+        const prod = db.find(p => p.id === id);
+        if (!prod) return;
+        if (qtd > prod.qtd) {
+            alert(`Estoque insuficiente! Disponível: ${prod.qtd} ${prod.unidade || "un"}`);
+            return;
+        }
+        const total = qtd * prod.preco;
+        const novaQtd = prod.qtd - qtd;
+        try {
+            await dbFirestore.collection('produtos').doc(id).update({ qtd: novaQtd });
+            const vendaObj = {
+                produtoId: prod.id,
+                produtoNome: prod.nome,
+                quantidade: qtd,
+                precoUnitario: prod.preco,
+                total: total,
+                unidade: prod.unidade || "un",
+                timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                usuario: currentUser.email
+            };
+            await dbFirestore.collection('vendas').add(vendaObj);
+        } catch(e) {
+            alert("Erro ao realizar venda rápida: " + e.message);
+        }
+    }
+    
+    function mostrarComprovante(venda) {
+        const data = venda.timestamp ? new Date(venda.timestamp.toDate()).toLocaleString() : "Data indefinida";
+        ultimoComprovante = venda;
+        const texto = `
+📦 ESTOQUEPRO - COMPROVANTE DE VENDA
+----------------------------------------
+Produto: ${venda.produtoNome}
+Quantidade: ${venda.quantidade} ${venda.unidade || "un"}
+Valor Unitário: R$ ${venda.precoUnitario.toFixed(2)}
+TOTAL: R$ ${venda.total.toFixed(2)}
+Data: ${data}
+Vendido por: ${venda.usuario || currentUser?.email || "Usuário"}
+----------------------------------------
+Obrigado pela preferência!
+        `;
+        document.getElementById('comprovanteContent').innerText = texto;
+        document.getElementById('modalComprovante').style.display = 'flex';
+    }
+    
+    function salvarComprovanteComoTxt() {
+        if (!ultimoComprovante) return;
+        const dataAtual = new Date().toISOString().slice(0,19).replace(/:/g, '-');
+        const texto = document.getElementById('comprovanteContent').innerText;
+        const blob = new Blob([texto], {type: 'text/plain'});
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `comprovante_${dataAtual}.txt`;
+        link.click();
+        URL.revokeObjectURL(link.href);
+    }
+    
+    function fecharModal() { document.getElementById('modal').style.display = 'none'; }
+    function fecharModalVenda() { document.getElementById('modalVenda').style.display = 'none'; }
+    function fecharModalRepor() { document.getElementById('modalRepor').style.display = 'none'; }
+    function fecharModalComprovante() { document.getElementById('modalComprovante').style.display = 'none'; }
+    function fecharModalRelatorio() { document.getElementById('modalRelatorio').style.display = 'none'; }
+    function fecharModalConfirmar() { document.getElementById('modalConfirmar').style.display = 'none'; }
+    
+    function abrirRelatorioGeral() {
+        if (hist.length === 0) {
+            alert("Nenhuma venda registrada ainda.");
+            return;
+        }
+        let totalGeral = 0;
+        let html = '<div style="border-bottom:1px solid var(--border); padding-bottom:8px;"><strong>Lista de Vendas</strong></div>';
+        hist.forEach(v => {
+            const data = v.timestamp ? new Date(v.timestamp.toDate()).toLocaleString() : "Data antiga";
+            totalGeral += v.total;
+            html += `<div class="relatorio-item"><div><b>${v.produtoNome}</b> (${v.quantidade} ${v.unidade || "un"})</div><div>R$ ${v.total.toFixed(2)}</div><div><small>${data}</small></div></div>`;
+        });
+        document.getElementById('relatorioVendasContent').innerHTML = html;
+        document.getElementById('totalGeralVendas').innerHTML = `💰 TOTAL GERAL DE VENDAS: R$ ${totalGeral.toFixed(2)}`;
+        document.getElementById('modalRelatorio').style.display = 'flex';
+    }
+    
+    function salvarRelatorioCompleto() {
+        let texto = "RELATÓRIO GERAL DE VENDAS\n";
+        texto += "==========================\n\n";
+        let totalGeral = 0;
+        hist.forEach(v => {
+            const data = v.timestamp ? new Date(v.timestamp.toDate()).toLocaleString() : "Data antiga";
+            totalGeral += v.total;
+            texto += `${v.produtoNome} - ${v.quantidade} ${v.unidade || "un"} - R$ ${v.total.toFixed(2)} - ${data}\n`;
+        });
+        texto += `\nTOTAL GERAL: R$ ${totalGeral.toFixed(2)}`;
+        const blob = new Blob([texto], {type: 'text/plain'});
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `relatorio_vendas_${new Date().toISOString().slice(0,10)}.txt`;
+        link.click();
+        URL.revokeObjectURL(link.href);
+    }
+    
+    function salvarRelatorioDiario() {
+        const hoje = new Date().toISOString().slice(0,10);
+        const vendasHoje = hist.filter(v => {
+            if (!v.timestamp) return false;
+            const dataVenda = new Date(v.timestamp.toDate()).toISOString().slice(0,10);
+            return dataVenda === hoje;
+        });
+        if (vendasHoje.length === 0) {
+            alert("Não há vendas registradas para o dia de hoje.");
+            return;
+        }
+        let texto = `RELATÓRIO DE VENDAS DO DIA ${hoje}\n`;
+        texto += "=================================\n\n";
+        let totalDia = 0;
+        vendasHoje.forEach(v => {
+            totalDia += v.total;
+            texto += `${v.produtoNome} - ${v.quantidade} ${v.unidade || "un"} - R$ ${v.total.toFixed(2)}\n`;
+        });
+        texto += `\nTOTAL DO DIA: R$ ${totalDia.toFixed(2)}`;
+        const blob = new Blob([texto], {type: 'text/plain'});
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `vendas_${hoje}.txt`;
+        link.click();
+        URL.revokeObjectURL(link.href);
+    }
+    
+    function confirmarApagarHistorico() {
+        document.getElementById('modalConfirmar').style.display = 'flex';
+    }
+    
+    async function executarApagarHistorico() {
+        try {
+            const vendasSnapshot = await dbFirestore.collection('vendas').get();
+            const batch = dbFirestore.batch();
+            vendasSnapshot.forEach(doc => {
+                batch.delete(doc.ref);
+            });
+            await batch.commit();
+            fecharModalConfirmar();
+        } catch(e) {
+            alert("Erro ao apagar histórico: " + e.message);
+        }
+    }
+    
+    // Tema
+    function toggleTema() {
+        document.body.classList.toggle('dark');
+        const btn = document.getElementById('btnTema');
+        if (document.body.classList.contains('dark')) {
+            btn.innerHTML = '☀️ MODO CLARO';
+        } else {
+            btn.innerHTML = '🌙 MODO ESCURO';
+        }
+    }
+    
+    // Menu sidebar mobile
+    document.getElementById('menuToggle')?.addEventListener('click', () => {
+        document.getElementById('sidebar').classList.toggle('open');
+    });
+    
+    // Inicialização
+    document.getElementById('reporQuantidade')?.addEventListener('input', atualizarNovaQuantidade);
+    document.getElementById('vendaQuantidade')?.addEventListener('input', atualizarTotalVenda);
+    window.addEventListener('click', (e) => {
+        if (e.target.classList.contains('modal')) e.target.style.display = 'none';
+    });
+    
+    initFirebase();
+</script>
+</body>
+</html>
